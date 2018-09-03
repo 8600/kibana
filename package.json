@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "axios": "^0.18.0",
+    "date-picker-owo": "^1.0.0",
     "echarts": "^4.1.0",
     "echarts-middleware": "^2.0.2",
     "elasticsearch": "^15.1.1",
