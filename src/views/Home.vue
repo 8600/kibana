@@ -8,7 +8,11 @@
       Chart(v-model="mock")
     .data-select
       .left-bar
-        .left-bar-item(v-for="item in indices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index + '(' + item['docs.count'] + ')'}}
+        .search-bar
+          Search(v-model="searchIndices")
+        //- 过渡动画
+        transition-group(name="staggered-fade", tag="div")
+          .left-bar-item(v-for="item in getIndices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index + '(' + item['docs.count'] + ')'}}
       .right-bar
         .empty(v-if="isEmpty") 当前筛选条件下没有数据
         .table-box(v-else)
@@ -23,6 +27,7 @@
 
 <script>
 import 'echarts'
+import Search from './Search'
 import moment from 'moment'
 import Chart from 'echarts-middleware'
 import Datepicker from 'date-picker-owo'
@@ -37,6 +42,7 @@ export default {
       isEmpty: true,
       client: null,
       indices: null,
+      searchIndices: '',
       endTime: {
         time: '2018-6-25'
       },
@@ -82,7 +88,7 @@ export default {
       },
       searchData: {
         body: [
-          { index: [] },
+          { index: '' },
           {
             size: 100,
             aggs: {
@@ -118,7 +124,19 @@ export default {
   },
   components: {
     Chart,
+    Search,
     Datepicker
+  },
+  computed: {
+    getIndices () {
+      console.log(this.searchIndices)
+      const vm = this
+      return this.indices.filter((item) => {
+        console.log(item.index.toLowerCase().indexOf(vm.searchIndices.toLowerCase()) !== -1)
+        if (vm.searchIndices) return item.index.toLowerCase().indexOf(vm.searchIndices.toLowerCase()) !== -1
+        else return true
+      })
+    }
   },
   created () {
     this.client = new elasticsearch.Client({
@@ -168,8 +186,12 @@ export default {
     },
     changeDataIndex (item) {
       // console.log(item)
-      this.searchData.body[0].index[0] = item.index
+      this.searchData.body[0].index = item.index
       this.getSearchData()
+    },
+    beforeEnter (el) {
+      el.style.opacity = 0
+      el.style.height = 0
     }
   }
 }
@@ -261,6 +283,7 @@ export default {
       padding: 0 10px;
     }
     .log {
+      word-break: break-all;
       word-wrap: break-word;
       width: calc(100% - 280px);
     }
