@@ -1,16 +1,24 @@
 <template lang="pug">
   .home(v-if="show")
-    .left-bar
-      .left-bar-item(v-for="item in indices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index}}
-    .right-bar
-      .empty(v-if="isEmpty") 当前分类下没有数据
-      template(v-else)
-        .top-bar
-          Datepicker.data-check(:date="startTime" @change="startTimeChange")
-          span.connector -
-          Datepicker.data-check(:date="endTime" @change="endTimeChange")
-        .chart-box
-          Chart(v-model="mock")
+    .top-bar
+      Datepicker.data-check(:date="startTime" @change="startTimeChange")
+      span.connector -
+      Datepicker.data-check(:date="endTime" @change="endTimeChange")
+    .chart-box
+      Chart(v-model="mock")
+    .data-select
+      .left-bar
+        .left-bar-item(v-for="item in indices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index + '(' + item['docs.count'] + ')'}}
+      .right-bar
+        .empty(v-if="isEmpty") 当前筛选条件下没有数据
+        .table-box(v-else)
+          .table-title-bar
+            .time 时间
+            .log 日志
+          .table-body
+            .table-body-bar(v-for="item in hits")
+              .time {{item._source['@timestamp']}}
+              .log {{JSON.stringify(item._source)}}
 </template>
 
 <script>
@@ -25,6 +33,7 @@ export default {
   data () {
     return {
       show: false,
+      hits: null,
       isEmpty: true,
       client: null,
       indices: null,
@@ -129,6 +138,7 @@ export default {
         const buckets = res.responses[0].aggregations.data.buckets
         let xAxis = []
         let data = []
+        this.hits = res.responses[0].hits.hits
         console.log('获取到数据:', buckets)
         if (buckets.length > 0) {
           buckets.forEach(element => {
@@ -167,21 +177,23 @@ export default {
 
 <style lang="less" scoped>
   .home {
-    width: 100%;
     height: 100%;
+    padding: 0 10px;
     overflow: hidden;
-    display: flex;
+    width: calc(100% - 20px);
+    background-color: #eff0f4;
   }
   .left-bar {
     width: 400px;
-    height: 100%;
+    margin-bottom: 5px;
+    background-color: white;
     line-height: 30px;
     overflow-x: hidden;
     overflow-y: auto;
+    border-radius: 2px;
     .left-bar-item {
       cursor: pointer;
       text-align: left;
-      border-bottom: 1px solid #ccc;
       margin: 0 10px;
     }
     .left-bar-item:hover {
@@ -191,14 +203,24 @@ export default {
   }
   .right-bar {
     position: relative;
-    width: calc(100% - 400px);
+    background-color: white;
+    margin-left: 5px;
+    margin-bottom: 5px;
+    width: calc(100% - 405px);
   }
   .top-bar {
-    height: 40px;
+    height: 49px;
+    margin: 5px 0;
+    border-radius: 2px;
+    line-height: 49px;
     text-align: right;
+    background-color: white;
   }
   .chart-box {
-    height: calc(100% - 40px);
+    height: 400px;
+    margin: 5px 0;
+    border-radius: 2px;
+    background-color: white;
   }
   .empty {
     position: absolute;
@@ -207,9 +229,40 @@ export default {
     top: 0;
     bottom: 0;
     margin: auto;
-    width: 300px;
+    width: 500px;
     height: 40px;
     font-size: 2rem;
     color: #ccc;
+  }
+  .data-select {
+    display: flex;
+    height: calc(100% - 464px);
+  }
+  .table-box {
+    height: 100%;
+    overflow: auto;
+    .table-title-bar {
+      background-color: #eff0f4;
+      margin: 10px;
+      height: 50px;
+      line-height: 50px;
+      text-align: left;
+      display: flex;
+    }
+    .table-body-bar {
+      display: flex;
+      margin: 10px;
+      overflow: hidden;
+      border-bottom: 1px solid #ccc;
+    }
+    .time {
+      text-align: left;
+      width: 260px;
+      padding: 0 10px;
+    }
+    .log {
+      word-wrap: break-word;
+      width: calc(100% - 280px);
+    }
   }
 </style>
