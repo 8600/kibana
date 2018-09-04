@@ -1,43 +1,38 @@
-<template>
-  <div v-if="show" class="home">
-    <Datepicker :date="startTime" :option="startTimeOption" @change="startTimeChange" />
-    <Chart v-model="mock" :size="{w: 1400, h: 800}"></Chart>
-  </div>
+<template lang="pug">
+  .home(v-if="show")
+    .left-bar
+      .left-bar-item(v-for="item in indices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index}}
+    .right-bar
+      .empty(v-if="isEmpty") 当前分类下没有数据
+      template(v-else)
+        .top-bar
+          Datepicker.data-check(:date="startTime" @change="startTimeChange")
+          span.connector -
+          Datepicker.data-check(:date="endTime" @change="endTimeChange")
+        .chart-box
+          Chart(v-model="mock")
 </template>
 
 <script>
 import 'echarts'
+import moment from 'moment'
 import Chart from 'echarts-middleware'
 import Datepicker from 'date-picker-owo'
 const elasticsearch = require('elasticsearch')
+
 export default {
   name: 'home',
   data () {
     return {
       show: false,
-      startTime: {
-        time: ''
+      isEmpty: true,
+      client: null,
+      indices: null,
+      endTime: {
+        time: '2018-6-25'
       },
-      startTimeOption: {
-        type: 'day',
-        placeholder: '起始时间',
-        week: ['yi', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
-        month: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-        format: 'YYYY-MM-DD',
-        inputStyle: {
-          'display': 'inline-block',
-          'padding': '6px',
-          'line-height': '22px',
-          'font-size': '16px',
-          'border': '2px solid #fff',
-          'box-shadow': '0 1px 3px 0 rgba(0, 0, 0, 0.2)',
-          'border-radius': '2px',
-          'color': '#5F5F5F'
-        },
-        color: {
-          header: '#ccc',
-          headerText: '#f00'
-        }
+      startTime: {
+        time: '2018-1-1'
       },
       mock: {
         "xAxis": {
@@ -75,6 +70,40 @@ export default {
             "data": []
           }
         ]
+      },
+      searchData: {
+        body: [
+          { index: [] },
+          {
+            size: 100,
+            aggs: {
+              data: {
+                date_histogram: {
+                  field: "@timestamp",
+                  interval: "1d",
+                  time_zone: "+08:00",
+                  min_doc_count: 0, // 强制返回空 buckets
+                  format: "yyyy-MM-dd"
+                }
+              }
+            },
+            query: {
+              bool: {
+                must: [
+                  {
+                    range: {
+                      "@timestamp":{
+                        gte: 1514736000000,
+                        lte: 1530374399999,
+                        format: "epoch_millis"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -83,63 +112,104 @@ export default {
     Datepicker
   },
   created () {
-    const client = new elasticsearch.Client({
+    this.client = new elasticsearch.Client({
       host: 'http://192.168.1.190:9200',
-      // log: 'trace',
       country: 'zh-cn',
       apiVersion: '6.2'
     })
-    client.msearch({
-      body: [
-        {},
-        { 
-          size: 100,
-          aggs: {
-            data: {
-              date_histogram: {
-                field: "@timestamp",
-                interval: "1d",
-                time_zone: "+08:00",
-                min_doc_count: 0, // 强制返回空 buckets
-                format: "yyyy-MM-dd"
-              }
-            }
-          },
-          query: {
-            bool: {
-              must: [
-                {
-                  range: {
-                    "@timestamp":{
-                      gte: 1514736000000,
-                      lte: 1530374399999,
-                      format: "epoch_millis"
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
-      ]
-    }).then(res => {
-      const buckets = res.responses[0].aggregations.data.buckets
-      let xAxis = []
-      let data = []
-      buckets.forEach(element => {
-        xAxis.push(element.key_as_string)
-        data.push({value: element.doc_count})
-      })
-      this.mock.xAxis.data = xAxis
-      this.mock.series[0].data = data
-      this.show = true
-      console.log(res.responses[0].aggregations.data.buckets)
+    this.client.cat.indices({format: 'json'}).then(data => {
+      console.log('获取到indices列表:', data)
+      this.indices = data
     })
+    this.getSearchData()
   },
   methods: {
+    getSearchData () {
+      this.client.msearch(this.searchData).then(res => {
+        const buckets = res.responses[0].aggregations.data.buckets
+        let xAxis = []
+        let data = []
+        console.log('获取到数据:', buckets)
+        if (buckets.length > 0) {
+          buckets.forEach(element => {
+            xAxis.push(element.key_as_string)
+            data.push({value: element.doc_count})
+          })
+          this.mock.xAxis.data = xAxis
+          this.mock.series[0].data = data
+          this.show = true
+          this.isEmpty = false
+        } else {
+          this.isEmpty = true
+        }
+        // console.log(res.responses[0].aggregations.data.buckets)
+      })
+    },
     startTimeChange (data) {
-      console.log(data)
+      const time = moment(data, 'YYYY-MM-DD').valueOf()
+      this.searchData.body[1].query.bool.must[0].range['@timestamp'].gte = time
+      this.getSearchData()
+      // console.log(time)
+    },
+    endTimeChange (data) {
+      const time = moment(data, 'YYYY-MM-DD').valueOf()
+      this.searchData.body[1].query.bool.must[0].range['@timestamp'].lte = time
+      this.getSearchData()
+    },
+    changeDataIndex (item) {
+      // console.log(item)
+      this.searchData.body[0].index[0] = item.index
+      this.getSearchData()
     }
   }
 }
 </script>
+
+<style lang="less" scoped>
+  .home {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+  }
+  .left-bar {
+    width: 400px;
+    height: 100%;
+    line-height: 30px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    .left-bar-item {
+      cursor: pointer;
+      text-align: left;
+      border-bottom: 1px solid #ccc;
+      margin: 0 10px;
+    }
+    .left-bar-item:hover {
+      color: white;
+      background-color: skyblue;
+    }
+  }
+  .right-bar {
+    position: relative;
+    width: calc(100% - 400px);
+  }
+  .top-bar {
+    height: 40px;
+    text-align: right;
+  }
+  .chart-box {
+    height: calc(100% - 40px);
+  }
+  .empty {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    margin: auto;
+    width: 300px;
+    height: 40px;
+    font-size: 2rem;
+    color: #ccc;
+  }
+</style>
