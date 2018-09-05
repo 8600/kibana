@@ -1,17 +1,20 @@
 <template lang="pug">
   .home(v-if="show")
     .top-bar
-      Datepicker.data-check(:date="startTime" @change="startTimeChange")
+      Datepicker.data-check(:date="startTime" @change="getSearchData()")
       span.connector -
-      Datepicker.data-check(:date="endTime" @change="endTimeChange")
+      Datepicker.data-check(:date="endTime" @change="getSearchData()")
     .chart-box
       Chart(v-model="mock")
     .data-select
       .left-bar
         .search-bar
           Search(v-model="searchIndices")
-        //- 过渡动画
+        //- 选择左侧栏
         .left-bar-item-box
+          .left-bar-label 已选择
+          .left-bar-item(v-for="item in searchList", :key="item", @click="changeDataIndex(item)") {{item}}
+          .left-bar-label 未选择
           .left-bar-item(v-for="item in getIndices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index + '(' + item['docs.count'] + ')'}}
       .right-bar
         .empty(v-if="isEmpty") 当前筛选条件下没有数据
@@ -22,13 +25,12 @@
           .table-body
             .table-body-bar(v-for="item in hits")
               .time {{item._source['@timestamp']}}
-              .log {{JSON.stringify(item._source)}}
+              .log {{item._source.message}}
 </template>
 
 <script>
 import 'echarts'
 import Search from './Search'
-import moment from 'moment'
 import Chart from 'echarts-middleware'
 import Datepicker from 'date-picker-owo'
 const elasticsearch = require('elasticsearch')
@@ -42,6 +44,7 @@ export default {
       isEmpty: true,
       client: null,
       indices: null,
+      activeIndex: null,
       searchIndices: '',
       endTime: {
         time: '2018-6-25'
@@ -70,56 +73,9 @@ export default {
           "start": 0,
           "end": 100
         }],
-        "series": [
-          {
-            "name": "攻击次数", 
-            "type": "line", 
-            "smooth": true, 
-            "symbol": "none", 
-            "sampling": "average", 
-            "itemStyle": {
-              "normal": {
-                "color": "rgb(255, 70, 131)"
-              }
-            },
-            "data": []
-          }
-        ]
+        "series": []
       },
-      searchData: {
-        body: [
-          { index: '' },
-          {
-            size: 100,
-            aggs: {
-              data: {
-                date_histogram: {
-                  field: "@timestamp",
-                  interval: "1d",
-                  time_zone: "+08:00",
-                  min_doc_count: 0, // 强制返回空 buckets
-                  format: "yyyy-MM-dd"
-                }
-              }
-            },
-            query: {
-              bool: {
-                must: [
-                  {
-                    range: {
-                      "@timestamp":{
-                        gte: 1514736000000,
-                        lte: 1530374399999,
-                        format: "epoch_millis"
-                      }
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        ]
-      }
+      searchList: []
     }
   },
   components: {
@@ -129,7 +85,7 @@ export default {
   },
   computed: {
     getIndices () {
-      console.log(this.searchIndices)
+      // console.log(this.searchIndices)
       const vm = this
       return this.indices.filter((item) => {
         if (vm.searchIndices) return item.index.toLowerCase().indexOf(vm.searchIndices.toLowerCase()) !== -1
@@ -151,41 +107,133 @@ export default {
   },
   methods: {
     getSearchData () {
-      this.client.msearch(this.searchData).then(res => {
-        const buckets = res.responses[0].aggregations.data.buckets
+      let searchData = {
+        body: []
+      }
+      // 根据搜索列表生成搜索条件
+      if (this.searchList.length > 0) {
+        // 如果选择的个数大于零则按照key搜索
+        for (let i = 0; i < this.searchList.length; i++) {
+          // 空搜索
+          searchData.body.push({ index: this.searchList[i] })
+          searchData.body.push({
+            size: 100,
+            aggs: {
+              requestCount: {
+                date_histogram: {
+                  field: "@timestamp",
+                  interval: "1d",
+                  time_zone: "+08:00",
+                  min_doc_count: 0, // 强制返回空 buckets
+                  format: "yyyy-MM-dd",
+                  // 强制返回整年
+                  extended_bounds: {
+                    "min" : this.startTime.time,
+                    "max" : this.endTime.time
+                  }
+                }
+              }
+            },
+            query: {
+              bool: {
+                must: {
+                  range: {
+                    "@timestamp":{
+                      gte: this.startTime.time,
+                      lte: this.endTime.time,
+                      format: "yyyy-MM-dd"
+                    }
+                  }
+                }
+              }
+            }
+          })
+        }
+      } else {
+        // 空搜索
+        searchData.body.push({ index: '' })
+        searchData.body.push({
+          size: 100,
+          aggs: {
+            requestCount: {
+              date_histogram: {
+                field: "@timestamp",
+                interval: "1d",
+                time_zone: "+08:00",
+                min_doc_count: 0, // 强制返回空 buckets
+                format: "yyyy-MM-dd",
+                // 强制返回整年
+                extended_bounds: {
+                  "min" : this.startTime.time,
+                  "max" : this.endTime.time
+                }
+              }
+            }
+          },
+          query: {
+            bool: {
+              must: {
+                range: {
+                  "@timestamp":{
+                    gte: this.startTime.time,
+                    lte: this.endTime.time,
+                    format: "yyyy-MM-dd"
+                  }
+                }
+              }
+            }
+          }
+        })
+      }
+      this.client.msearch(searchData).then(res => {
         let xAxis = []
         let data = []
-        this.hits = res.responses[0].hits.hits
-        console.log('获取到数据:', buckets)
-        if (buckets.length > 0) {
-          buckets.forEach(element => {
-            xAxis.push(element.key_as_string)
-            data.push({value: element.doc_count})
-          })
-          this.mock.xAxis.data = xAxis
-          this.mock.series[0].data = data
-          this.show = true
-          this.isEmpty = false
-        } else {
-          this.isEmpty = true
-        }
-        // console.log(res.responses[0].aggregations.data.buckets)
+        let chartData = JSON.parse(JSON.stringify(this.mock))
+        console.log('获取到数据:', res.responses)
+        res.responses.forEach((element, ind) => {
+          // 图表数据
+          const buckets = element.aggregations.requestCount.buckets
+          this.hits = element.hits.hits
+          if (buckets.length > 0) {
+            // 初始化数据列表
+            data[ind] = []
+            buckets.forEach(bucketsElement => {
+              // 坐标轴只用添加一次
+              if (ind === 0) xAxis.push(bucketsElement.key_as_string)
+              data[ind].push({value: bucketsElement.doc_count})
+            })
+            chartData.xAxis.data = xAxis
+            // 清除图表中已有数据
+            chartData.series = []
+            // 填充图表数据
+            data.forEach((dataElement, ind) => {
+              chartData.series.push({
+                "name": this.searchList[ind], 
+                "type": "line", 
+                "smooth": true, 
+                "symbol": "none", 
+                "sampling": "average", 
+                "itemStyle": {
+                  "normal": {
+                    "color": "rgb(255, 70, 131)"
+                  }
+                },
+                "data": dataElement
+              })
+            })
+            this.mock = chartData
+            this.show = true
+            this.isEmpty = false
+          } else {
+            this.isEmpty = true
+          }
+        })
       })
-    },
-    startTimeChange (data) {
-      const time = moment(data, 'YYYY-MM-DD').valueOf()
-      this.searchData.body[1].query.bool.must[0].range['@timestamp'].gte = time
-      this.getSearchData()
-      // console.log(time)
-    },
-    endTimeChange (data) {
-      const time = moment(data, 'YYYY-MM-DD').valueOf()
-      this.searchData.body[1].query.bool.must[0].range['@timestamp'].lte = time
-      this.getSearchData()
     },
     changeDataIndex (item) {
       // console.log(item)
-      this.searchData.body[0].index = item.index
+      this.activeIndex = item.index
+      this.searchList.push(item.index)
       this.getSearchData()
     },
     beforeEnter (el) {
@@ -219,10 +267,11 @@ export default {
       cursor: pointer;
       text-align: left;
       margin: 0 10px;
+      padding: 0 5px;
     }
     .left-bar-item:hover {
-      color: white;
-      background-color: skyblue;
+      color: #333;
+      background-color: beige;
     }
   }
   .right-bar {
@@ -274,7 +323,7 @@ export default {
       display: flex;
     }
     .table-body {
-      height: calc(100% - 50px);
+      height: calc(100% - 70px);
       overflow: auto;
     }
     .table-body-bar {
