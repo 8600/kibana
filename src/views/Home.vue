@@ -11,7 +11,7 @@
         .search-bar
           Search(v-model="searchIndices")
         //- 过渡动画
-        transition-group(name="staggered-fade", tag="div")
+        .left-bar-item-box
           .left-bar-item(v-for="item in getIndices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index + '(' + item['docs.count'] + ')'}}
       .right-bar
         .empty(v-if="isEmpty") 当前筛选条件下没有数据
@@ -132,7 +132,6 @@ export default {
       console.log(this.searchIndices)
       const vm = this
       return this.indices.filter((item) => {
-        console.log(item.index.toLowerCase().indexOf(vm.searchIndices.toLowerCase()) !== -1)
         if (vm.searchIndices) return item.index.toLowerCase().indexOf(vm.searchIndices.toLowerCase()) !== -1
         else return true
       })
@@ -210,9 +209,12 @@ export default {
     margin-bottom: 5px;
     background-color: white;
     line-height: 30px;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
     border-radius: 2px;
+    .left-bar-item-box {
+      overflow: auto;
+      height: calc(100% - 40px);
+    }
     .left-bar-item {
       cursor: pointer;
       text-align: left;
@@ -262,7 +264,7 @@ export default {
   }
   .table-box {
     height: 100%;
-    overflow: auto;
+    overflow: hidden;
     .table-title-bar {
       background-color: #eff0f4;
       margin: 10px;
@@ -270,6 +272,10 @@ export default {
       line-height: 50px;
       text-align: left;
       display: flex;
+    }
+    .table-body {
+      height: calc(100% - 50px);
+      overflow: auto;
     }
     .table-body-bar {
       display: flex;
@@ -283,6 +289,7 @@ export default {
       padding: 0 10px;
     }
     .log {
+      text-align: left;
       word-break: break-all;
       word-wrap: break-word;
       width: calc(100% - 280px);
