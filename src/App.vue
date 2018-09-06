@@ -19,4 +19,7 @@ body, html, #app {
   text-align: center;
   color: #2c3e50;
 }
+highlight {
+  background-color: yellow;
+}
 </style>

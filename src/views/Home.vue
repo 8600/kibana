@@ -2,7 +2,7 @@
   .home(v-if="show")
     .top-bar
       .search-bar
-        Search(v-model="searchIndices")
+        Search(@input="searchText")
       Datepicker.data-check(:date="startTime" @change="getSearchData()")
       span.connector -
       Datepicker.data-check(:date="endTime" @change="getSearchData()")
@@ -17,7 +17,7 @@
         .left-bar-item-box
           .left-bar-label 未选择
       .right-bar
-        .empty(v-if="isEmpty") 当前筛选条件下没有数据
+        .empty(v-if="hits.length === 0") 当前筛选条件下没有数据
         .table-box(v-else)
           .table-title-bar
             .time 时间
@@ -25,7 +25,7 @@
           .table-body
             .table-body-bar(v-for="item in hits")
               .time {{item._source['@timestamp']}}
-              .log {{item._source.message}}
+              .log(v-html="item._source.message")
 </template>
 
 <script>
@@ -41,7 +41,6 @@ export default {
     return {
       show: false,
       hits: null,
-      isEmpty: true,
       client: null,
       indices: null,
       activeIndex: null,
@@ -216,9 +215,6 @@ export default {
             })
             this.mock = chartData
             this.show = true
-            this.isEmpty = false
-          } else {
-            this.isEmpty = true
           }
         })
       })
@@ -229,6 +225,26 @@ export default {
     beforeEnter (el) {
       el.style.opacity = 0
       el.style.height = 0
+    },
+    searchText (value) {
+      console.log(value)
+      if (value) {
+        this.client.search({
+          q: value,
+          size: 100,
+          index: this.searchList[0]
+        }).then((res) => {
+          // 高亮搜索内容
+          let hits = res.hits.hits
+          console.log(hits)
+          for (let key in hits) {
+            hits[key]._source.message = hits[key]._source.message.replace(new RegExp(value, 'gm'), `<highlight>${value}</highlight>`)
+          }
+          this.hits = hits
+        })
+      } else {
+        alert('没有输入搜索条件!')
+      }
     }
   }
 }
