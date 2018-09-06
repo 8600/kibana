@@ -1,6 +1,8 @@
 <template lang="pug">
   .home(v-if="show")
     .top-bar
+      .search-bar
+        Search(v-model="searchIndices")
       Datepicker.data-check(:date="startTime" @change="getSearchData()")
       span.connector -
       Datepicker.data-check(:date="endTime" @change="getSearchData()")
@@ -8,14 +10,12 @@
       Chart(v-model="mock")
     .data-select
       .left-bar
-        .search-bar
-          Search(v-model="searchIndices")
+        select(v-model="searchList[0]", @change="getSearchData()")
+          option(value="") *
+          option(v-for="item in indices", :key="item.uuid", :value="item.index") {{item.index}}
         //- 选择左侧栏
         .left-bar-item-box
-          .left-bar-label 已选择
-          .left-bar-item(v-for="item in searchList", :key="item", @click="changeDataIndex(item)") {{item}}
           .left-bar-label 未选择
-          .left-bar-item(v-for="item in getIndices", :key="item.uuid", @click="changeDataIndex(item)") {{item.index + '(' + item['docs.count'] + ')'}}
       .right-bar
         .empty(v-if="isEmpty") 当前筛选条件下没有数据
         .table-box(v-else)
@@ -75,7 +75,8 @@ export default {
         }],
         "series": []
       },
-      searchList: []
+      sourceList: [],
+      searchList: [""]
     }
   },
   components: {
@@ -84,14 +85,6 @@ export default {
     Datepicker
   },
   computed: {
-    getIndices () {
-      // console.log(this.searchIndices)
-      const vm = this
-      return this.indices.filter((item) => {
-        if (vm.searchIndices) return item.index.toLowerCase().indexOf(vm.searchIndices.toLowerCase()) !== -1
-        else return true
-      })
-    }
   },
   created () {
     this.client = new elasticsearch.Client({
@@ -230,10 +223,7 @@ export default {
         })
       })
     },
-    changeDataIndex (item) {
-      // console.log(item)
-      this.activeIndex = item.index
-      this.searchList.push(item.index)
+    changeDataIndex () {
       this.getSearchData()
     },
     beforeEnter (el) {
