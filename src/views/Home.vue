@@ -19,11 +19,12 @@
       .right-bar
         .empty(v-if="hits.length === 0") 当前筛选条件下没有数据
         .table-box(v-else)
-          Searching(v-if="loading")
+          Searching(v-if="searching")
           template(v-else)
             .table-title-bar
               .time 时间
               .log 日志
+              .next(@click="getPagesData") 下一页
             .table-body
               .table-body-bar(v-for="item in hits")
                 .time {{item._source['@timestamp']}}
@@ -46,7 +47,7 @@ export default {
       hits: null,
       client: null,
       indices: null,
-      loading: false,
+      searching: false,
       activeIndex: null,
       searchIndices: '',
       endTime: {
@@ -132,15 +133,11 @@ export default {
               }
             },
             query: {
-              bool: {
-                must: {
-                  range: {
-                    "@timestamp":{
-                      gte: this.startTime.time,
-                      lte: this.endTime.time,
-                      format: "yyyy-MM-dd"
-                    }
-                  }
+              range: {
+                "@timestamp":{
+                  gte: this.startTime.time,
+                  lte: this.endTime.time,
+                  format: "yyyy-MM-dd"
                 }
               }
             }
@@ -168,15 +165,11 @@ export default {
             }
           },
           query: {
-            bool: {
-              must: {
-                range: {
-                  "@timestamp":{
-                    gte: this.startTime.time,
-                    lte: this.endTime.time,
-                    format: "yyyy-MM-dd"
-                  }
-                }
+            range: {
+              "@timestamp":{
+                gte: this.startTime.time,
+                lte: this.endTime.time,
+                format: "yyyy-MM-dd"
               }
             }
           }
@@ -224,6 +217,56 @@ export default {
         })
       })
     },
+    getPagesData () {
+      this.searching = true
+      let searchData = {
+        body: []
+      }
+      // 根据搜索列表生成搜索条件
+      if (this.searchList.length > 0) {
+        // 如果选择的个数大于零则按照key搜索
+        for (let i = 0; i < this.searchList.length; i++) {
+          // 空搜索
+          searchData.body.push({ index: this.searchList[i] })
+          searchData.body.push({
+            from: 100,
+            size: 100,
+            query: {
+              range: {
+                "@timestamp":{
+                  gte: this.startTime.time,
+                  lte: this.endTime.time,
+                  format: "yyyy-MM-dd"
+                }
+              }
+            }
+          })
+        }
+      } else {
+        // 空搜索
+        searchData.body.push({ index: '' })
+        searchData.body.push({
+          from: 100,
+          size: 100,
+          query: {
+            range: {
+              "@timestamp":{
+                gte: this.startTime.time,
+                lte: this.endTime.time,
+                format: "yyyy-MM-dd"
+              }
+            }
+          }
+        })
+      }
+      this.client.msearch(searchData).then(res => {
+        console.log('获取到数据:', res.responses)
+        res.responses.forEach((element) => {
+          this.hits = element.hits.hits
+          this.searching = false
+        })
+      })
+    },
     changeDataIndex () {
       this.getSearchData()
     },
@@ -233,7 +276,7 @@ export default {
     },
     searchText (value) {
       if (value) {
-        this.loading = true
+        this.searching = true
         this.client.search({
           q: value,
           size: 100,
@@ -246,7 +289,7 @@ export default {
             hits[key]._source.message = hits[key]._source.message.replace(new RegExp(value, 'gm'), `<highlight>${value}</highlight>`)
           }
           this.hits = hits
-          this.loading = false
+          this.searching = false
         })
       } else {
         alert('没有输入搜索条件!')
@@ -296,6 +339,7 @@ export default {
   .top-bar {
     height: 49px;
     margin: 5px 0;
+    display: flex;
     border-radius: 2px;
     line-height: 49px;
     text-align: right;
@@ -330,9 +374,14 @@ export default {
       background-color: #eff0f4;
       margin: 10px;
       height: 50px;
+      position: relative;
       line-height: 50px;
       text-align: left;
       display: flex;
+      .next {
+        position: absolute;
+        right: 10px;
+      }
     }
     .table-body {
       height: calc(100% - 70px);
