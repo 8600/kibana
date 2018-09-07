@@ -19,18 +19,21 @@
       .right-bar
         .empty(v-if="hits.length === 0") 当前筛选条件下没有数据
         .table-box(v-else)
-          .table-title-bar
-            .time 时间
-            .log 日志
-          .table-body
-            .table-body-bar(v-for="item in hits")
-              .time {{item._source['@timestamp']}}
-              .log(v-html="item._source.message")
+          Searching(v-if="loading")
+          template(v-else)
+            .table-title-bar
+              .time 时间
+              .log 日志
+            .table-body
+              .table-body-bar(v-for="item in hits")
+                .time {{item._source['@timestamp']}}
+                .log(v-html="item._source.message")
 </template>
 
 <script>
 import 'echarts'
 import Search from './Search'
+import Searching from '../components/Searching'
 import Chart from 'echarts-middleware'
 import Datepicker from 'date-picker-owo'
 const elasticsearch = require('elasticsearch')
@@ -43,6 +46,7 @@ export default {
       hits: null,
       client: null,
       indices: null,
+      loading: false,
       activeIndex: null,
       searchIndices: '',
       endTime: {
@@ -81,6 +85,7 @@ export default {
   components: {
     Chart,
     Search,
+    Searching,
     Datepicker
   },
   computed: {
@@ -227,8 +232,8 @@ export default {
       el.style.height = 0
     },
     searchText (value) {
-      console.log(value)
       if (value) {
+        this.loading = true
         this.client.search({
           q: value,
           size: 100,
@@ -236,11 +241,12 @@ export default {
         }).then((res) => {
           // 高亮搜索内容
           let hits = res.hits.hits
-          console.log(hits)
+          // console.log(hits)
           for (let key in hits) {
             hits[key]._source.message = hits[key]._source.message.replace(new RegExp(value, 'gm'), `<highlight>${value}</highlight>`)
           }
           this.hits = hits
+          this.loading = false
         })
       } else {
         alert('没有输入搜索条件!')
