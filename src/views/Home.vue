@@ -24,7 +24,10 @@
             .table-title-bar
               .time 时间
               .log 日志
-              .next(@click="getPagesData") 下一页
+              .page-box
+                .last(@click="getPagesData(page.current - 1)") 上一页
+                .total {{page.current}} / {{page.total}}
+                .next(@click="getPagesData(page.current + 1)") 下一页
             .table-body
               .table-body-bar(v-for="item in hits")
                 .time {{item._source['@timestamp']}}
@@ -33,7 +36,7 @@
 
 <script>
 import 'echarts'
-import Search from './Search'
+import Search from '../components/Search'
 import Searching from '../components/Searching'
 import Chart from 'echarts-middleware'
 import Datepicker from 'date-picker-owo'
@@ -79,6 +82,11 @@ export default {
         }],
         "series": []
       },
+      page: {
+        num: 100, // 每页条数
+        total: 0, // 总页数
+        current: 1, // 当前页面
+      },
       sourceList: [],
       searchList: [""]
     }
@@ -115,7 +123,7 @@ export default {
           // 空搜索
           searchData.body.push({ index: this.searchList[i] })
           searchData.body.push({
-            size: 100,
+            size: this.page.num,
             aggs: {
               requestCount: {
                 date_histogram: {
@@ -147,7 +155,7 @@ export default {
         // 空搜索
         searchData.body.push({ index: '' })
         searchData.body.push({
-          size: 100,
+          size: this.page.num,
           aggs: {
             requestCount: {
               date_histogram: {
@@ -184,6 +192,8 @@ export default {
           // 图表数据
           const buckets = element.aggregations.requestCount.buckets
           this.hits = element.hits.hits
+          // 取出总页数
+          this.page.total = Math.ceil(element.hits.total / this.page.num)
           if (buckets.length > 0) {
             // 初始化数据列表
             data[ind] = []
@@ -217,7 +227,10 @@ export default {
         })
       })
     },
-    getPagesData () {
+    getPagesData (pageNum) {
+      if (pageNum < 1 || pageNum > this.page.total) return
+      this.page.current = pageNum
+      // 计算页面
       this.searching = true
       let searchData = {
         body: []
@@ -229,8 +242,8 @@ export default {
           // 空搜索
           searchData.body.push({ index: this.searchList[i] })
           searchData.body.push({
-            from: 100,
-            size: 100,
+            from: pageNum * this.page.num,
+            size: this.page.num,
             query: {
               range: {
                 "@timestamp":{
@@ -246,8 +259,8 @@ export default {
         // 空搜索
         searchData.body.push({ index: '' })
         searchData.body.push({
-          from: 100,
-          size: 100,
+          from: pageNum * this.page.num,
+          size: this.page.num,
           query: {
             range: {
               "@timestamp":{
@@ -279,7 +292,7 @@ export default {
         this.searching = true
         this.client.search({
           q: value,
-          size: 100,
+          size: this.page.num,
           index: this.searchList[0]
         }).then((res) => {
           // 高亮搜索内容
@@ -378,7 +391,8 @@ export default {
       line-height: 50px;
       text-align: left;
       display: flex;
-      .next {
+      .page-box {
+        display: flex;
         position: absolute;
         right: 10px;
       }
